@@ -1,0 +1,284 @@
+"""EIT parser for DVB present/following and schedule events."""
+
+import logging
+
+from mpeg_ts_parser.pat_pmt import find_pat, get_eit_pid
+from mpeg_ts_parser.stream import StreamBase, parse_ts_header
+from mpeg_ts_parser.utils import (
+    bcd_to_time,
+    parse_short_event_descriptor,
+)
+
+logger = logging.getLogger(__name__)
+
+TS_PACKET_SIZE = 188
+EIT_TABLE_ID_PRESENT_FOLLOWING = 0x4E
+EIT_TABLE_ID_SCHEDULE_START = 0x4F
+EIT_TABLE_ID_SCHEDULE_END = 0x5F
+EIT_PID_STANDARD = 0x0012
+SHORT_EVENT_DESCRIPTOR = 0x4D
+
+
+def parse_eit_event(
+    data: bytes,
+    offset: int,
+    end_offset: int,
+) -> tuple[dict | None, int]:
+    """Parse a single EIT event from data.
+    
+    Args:
+        data: EIT section data
+        offset: Current offset in data
+        end_offset: End of event loop
+    
+    Returns:
+        Tuple of (event_dict, new_offset)
+    """
+    if offset + 12 > end_offset:
+        return None, offset
+    
+    event_id = (data[offset] << 8) | data[offset + 1]
+    start_bcd = data[offset + 4:offset + 7]
+    duration_bcd = data[offset + 7:offset + 10]
+    running_status = (data[offset + 10] >> 5) & 0x07
+    free_ca_mode = (data[offset + 10] >> 4) & 0x01
+    descriptors_length = ((data[offset + 10] & 0x0F) << 8) | data[offset + 11]
+    
+    offset += 12
+    
+    start_time = bcd_to_time(start_bcd)
+    duration = bcd_to_time(duration_bcd)
+    
+    event_name = None
+    desc_end = offset + descriptors_length
+    
+    while offset + 2 <= desc_end:
+        desc_tag = data[offset]
+        desc_length = data[offset + 1]
+        
+        if offset + 2 + desc_length > desc_end:
+            logger.warning("EIT descriptor truncated")
+            break
+        
+        if desc_tag == SHORT_EVENT_DESCRIPTOR:
+            event_name = parse_short_event_descriptor(
+                data[offset + 2:offset + 2 + desc_length]
+            )
+        
+        offset += 2 + desc_length
+    
+    return {
+        'event_id': event_id,
+        'start_time': start_time,
+        'duration': duration,
+        'name': event_name,
+        'running_status': running_status,
+        'free_ca_mode': free_ca_mode,
+    }, offset
+
+
+def parse_eit_section(data: bytes) -> dict | None:
+    """Parse EIT section payload.
+    
+    Args:
+        data: EIT section data (after pointer field)
+    
+    Returns:
+        EIT dict with events, or None
+    """
+    if len(data) < 11:
+        return None
+    
+    table_id = data[0]
+    
+    if (
+        table_id < EIT_TABLE_ID_PRESENT_FOLLOWING
+        or table_id > EIT_TABLE_ID_SCHEDULE_END
+    ):
+        return None
+    
+    section_length = ((data[1] & 0x0F) << 8) | data[2]
+    
+    if len(data) < 3 + section_length:
+        logger.warning("EIT section truncated")
+        return None
+    
+    service_id = (data[3] << 8) | data[4]
+    version_number = (data[5] >> 1) & 0x1F
+    current_next_indicator = data[5] & 0x01
+    section_number = data[6]
+    last_section_number = data[7]
+    transport_stream_id = (data[8] << 8) | data[9]
+    original_network_id = (data[10] << 8) | data[11]
+    
+    events = []
+    offset = 14
+    section_end = 3 + section_length - 4
+    
+    while offset < section_end:
+        event, offset = parse_eit_event(data, offset, section_end)
+        if event:
+            events.append(event)
+    
+    return {
+        'table_id': table_id,
+        'service_id': service_id,
+        'version_number': version_number,
+        'current_next_indicator': current_next_indicator,
+        'section_number': section_number,
+        'last_section_number': last_section_number,
+        'transport_stream_id': transport_stream_id,
+        'original_network_id': original_network_id,
+        'events': events,
+    }
+
+
+def find_eit_packets(
+    stream: StreamBase,
+    eit_pid: int,
+    max_packets: int = 500,
+) -> list[bytes]:
+    """Find EIT packets from stream.
+    
+    Args:
+        stream: Stream reader
+        eit_pid: EIT PID
+        max_packets: Maximum packets to scan
+    
+    Returns:
+        List of EIT packet payloads
+    """
+    packets = stream.read_packets(max_packets)
+    eit_payloads = []
+    
+    for packet in packets:
+        header = parse_ts_header(packet)
+        if header is None:
+            continue
+        
+        if header['pid'] == eit_pid and header['payload_unit_start_indicator']:
+            payload_start = 4
+            if header['adaptation_field_control'] in (2, 3):
+                if header['adaptation_field_control'] == 2:
+                    continue
+                if len(packet) > 4:
+                    adaptation_length = packet[4]
+                    payload_start = 5 + adaptation_length
+            
+            if payload_start >= TS_PACKET_SIZE:
+                continue
+            
+            payload = packet[payload_start:]
+            
+            if len(payload) > 0:
+                pointer_field = payload[0]
+                section_data = payload[1 + pointer_field:]
+                eit_payloads.append(section_data)
+    
+    logger.info("Found %d EIT payloads", len(eit_payloads))
+    return eit_payloads
+
+
+def parse_eit_present_following(stream: StreamBase, eit_pid: int | None = None) -> dict:
+    """Parse EIT present/following events.
+    
+    Args:
+        stream: Stream reader
+        eit_pid: Optional EIT PID (discovered if not provided)
+    
+    Returns:
+        Dict with 'present' and 'next' events
+    """
+    if eit_pid is None:
+        pat = find_pat(stream)
+        eit_pid = get_eit_pid(stream, pat)
+    
+    eit_payloads = find_eit_packets(stream, eit_pid)
+    
+    present_event = None
+    next_event = None
+    
+    for payload in eit_payloads:
+        section = parse_eit_section(payload)
+        if section is None:
+            continue
+        
+        if section['table_id'] != EIT_TABLE_ID_PRESENT_FOLLOWING:
+            continue
+        
+        if section['current_next_indicator'] != 1:
+            continue
+        
+        events = section.get('events', [])
+        
+        if len(events) >= 1 and present_event is None:
+            present_event = events[0]
+        
+        if len(events) >= 2 and next_event is None:
+            next_event = events[1]
+        
+        if present_event and next_event:
+            break
+    
+    metadata = {}
+    if eit_payloads:
+        section = parse_eit_section(eit_payloads[0])
+        if section:
+            metadata = {
+                'network_id': section.get('original_network_id'),
+                'transport_stream_id': section.get('transport_stream_id'),
+                'service_id': section.get('service_id'),
+            }
+    
+    return {
+        'present': present_event,
+        'next': next_event,
+        'metadata': metadata,
+    }
+
+
+def parse_eit_schedule(
+    stream: StreamBase,
+    eit_pid: int | None = None,
+    max_events: int = 10,
+) -> list[dict]:
+    """Parse EIT schedule events.
+    
+    Args:
+        stream: Stream reader
+        eit_pid: Optional EIT PID
+        max_events: Maximum events to return (1-40)
+    
+    Returns:
+        List of schedule events
+    """
+    max_events = max(1, min(40, max_events))
+    
+    if eit_pid is None:
+        pat = find_pat(stream)
+        eit_pid = get_eit_pid(stream, pat)
+    
+    eit_payloads = find_eit_packets(stream, eit_pid, max_packets=1000)
+    
+    events = []
+    for payload in eit_payloads:
+        section = parse_eit_section(payload)
+        if section is None:
+            continue
+        
+        table_id = section['table_id']
+        if (
+            table_id < EIT_TABLE_ID_SCHEDULE_START
+            or table_id > EIT_TABLE_ID_SCHEDULE_END
+        ):
+            continue
+        
+        if section['current_next_indicator'] != 1:
+            continue
+        
+        for event in section.get('events', []):
+            if len(events) >= max_events:
+                return events
+            events.append(event)
+    
+    return events

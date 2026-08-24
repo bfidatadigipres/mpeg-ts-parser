@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mpeg-ts-parser"
+version = "0.1.0"
+description = "Parse MPEG Transport Streams to extract DVB EIT programme metadata"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+requires-python = ">=3.11"
+keywords = ["mpeg-ts", "dvb", "eit", "rtp", "transport-stream", "programme-metadata"]
+authors = [
+  { name = "Digitensions", email = "joanna.white@bfi.org.uk" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Topic :: Multimedia :: Video",
+    "Topic :: System :: Networking",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest >= 7.0",
+    "ruff",
+]
+
+[project.urls]
+Homepage = "https://github.com/bfidatadigipres/mpeg-ts-parser"
+Repository = "https://github.com/bfidatadigipres/mpeg-ts-parser"
+Issues = "https://github.com/bfidatadigipres/mpeg-ts-parser/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mpeg_ts_parser"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
