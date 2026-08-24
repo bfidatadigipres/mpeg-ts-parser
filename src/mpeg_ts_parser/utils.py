@@ -86,7 +86,7 @@ def build_folder_path(event: dict, format: str = "string") -> str | list:
     Args:
         event: Event dict with 'start_time', 'event_id', 'duration'
         format: 'string' returns "HH-MM-SS_eventId_HH-MM-SS",
-                'list' returns ["HH:MM:SS", "eventId", "HH:MM:SS"]
+                'list' returns ["HH-MM-SS", "eventId", "HH-MM-SS"]
     
     Returns:
         Formatted folder path
@@ -96,8 +96,6 @@ def build_folder_path(event: dict, format: str = "string") -> str | list:
     duration = event.get('duration', '00-00-00')
     
     if format == "list":
-        start_time_colons = start_time.replace('-', ':')
-        duration_colons = duration.replace('-', ':')
-        return [start_time_colons, str(event_id), duration_colons]
+        return [start_time, str(event_id), duration]
     
     return f"{start_time}_{event_id}_{duration}"

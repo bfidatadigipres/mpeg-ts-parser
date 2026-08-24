@@ -94,7 +94,7 @@ class TestBuildFolderPath:
             'duration': '00-30-00',
         }
         result = build_folder_path(event, format='list')
-        assert result == ['09:00:00', '1425', '00:30:00']
+        assert result == ['09-00-00', '1425', '00-30-00']
     
     def test_missing_fields(self):
         event = {}
