@@ -138,7 +138,9 @@ def find_eit_packets(
     eit_pid: int,
     max_packets: int = 500,
 ) -> list[bytes]:
-    """Find EIT packets from stream.
+    """Find EIT packets from stream and reassemble sections.
+    
+    Handles multi-packet section reassembly based on section_length field.
     
     Args:
         stream: Stream reader
@@ -146,37 +148,67 @@ def find_eit_packets(
         max_packets: Maximum packets to scan
     
     Returns:
-        List of EIT packet payloads
+        List of complete EIT section payloads
     """
     packets = stream.read_packets(max_packets)
-    eit_payloads = []
+    eit_sections = []
+    
+    section_buffer = b''
+    in_section = False
+    expected_length = 0
     
     for packet in packets:
         header = parse_ts_header(packet)
         if header is None:
             continue
         
-        if header['pid'] == eit_pid and header['payload_unit_start_indicator']:
-            payload_start = 4
-            if header['adaptation_field_control'] in (2, 3):
-                if header['adaptation_field_control'] == 2:
-                    continue
-                if len(packet) > 4:
-                    adaptation_length = packet[4]
-                    payload_start = 5 + adaptation_length
-            
-            if payload_start >= TS_PACKET_SIZE:
+        if header['pid'] != eit_pid:
+            continue
+        
+        payload_start = 4
+        if header['adaptation_field_control'] in (2, 3):
+            if header['adaptation_field_control'] == 2:
                 continue
+            if len(packet) > 4:
+                adaptation_length = packet[4]
+                payload_start = 5 + adaptation_length
+        
+        if payload_start >= TS_PACKET_SIZE:
+            continue
+        
+        payload = packet[payload_start:]
+        if len(payload) == 0:
+            continue
+        
+        if header['payload_unit_start_indicator']:
+            pointer_field = payload[0]
+            section_data = payload[1 + pointer_field:]
             
-            payload = packet[payload_start:]
+            if in_section and len(section_buffer) >= expected_length:
+                eit_sections.append(section_buffer[:expected_length])
             
-            if len(payload) > 0:
-                pointer_field = payload[0]
-                section_data = payload[1 + pointer_field:]
-                eit_payloads.append(section_data)
+            if len(section_data) >= 3:
+                section_length = ((section_data[1] & 0x0F) << 8) | section_data[2]
+                expected_length = 3 + section_length
+                section_buffer = section_data
+                in_section = True
+            else:
+                in_section = False
+                section_buffer = b''
+        else:
+            if in_section:
+                section_buffer += payload
+        
+        if in_section and len(section_buffer) >= expected_length:
+            eit_sections.append(section_buffer[:expected_length])
+            section_buffer = b''
+            in_section = False
     
-    logger.info("Found %d EIT payloads", len(eit_payloads))
-    return eit_payloads
+    if in_section and len(section_buffer) >= expected_length:
+        eit_sections.append(section_buffer[:expected_length])
+    
+    logger.info("Found %d complete EIT sections", len(eit_sections))
+    return eit_sections
 
 
 def parse_eit_present_following(stream: StreamBase, eit_pid: int | None = None) -> dict:
@@ -193,13 +225,13 @@ def parse_eit_present_following(stream: StreamBase, eit_pid: int | None = None) 
         pat = find_pat(stream)
         eit_pid = get_eit_pid(stream, pat)
     
-    eit_payloads = find_eit_packets(stream, eit_pid)
+    eit_sections = find_eit_packets(stream, eit_pid)
     
     present_event = None
     next_event = None
     
-    for payload in eit_payloads:
-        section = parse_eit_section(payload)
+    for section_data in eit_sections:
+        section = parse_eit_section(section_data)
         if section is None:
             continue
         
@@ -221,14 +253,15 @@ def parse_eit_present_following(stream: StreamBase, eit_pid: int | None = None) 
             break
     
     metadata = {}
-    if eit_payloads:
-        section = parse_eit_section(eit_payloads[0])
-        if section:
+    for section_data in eit_sections:
+        section = parse_eit_section(section_data)
+        if section and section['table_id'] == EIT_TABLE_ID_PRESENT_FOLLOWING:
             metadata = {
                 'network_id': section.get('original_network_id'),
                 'transport_stream_id': section.get('transport_stream_id'),
                 'service_id': section.get('service_id'),
             }
+            break
     
     return {
         'present': present_event,
@@ -258,11 +291,11 @@ def parse_eit_schedule(
         pat = find_pat(stream)
         eit_pid = get_eit_pid(stream, pat)
     
-    eit_payloads = find_eit_packets(stream, eit_pid, max_packets=1000)
+    eit_sections = find_eit_packets(stream, eit_pid, max_packets=1000)
     
     events = []
-    for payload in eit_payloads:
-        section = parse_eit_section(payload)
+    for section_data in eit_sections:
+        section = parse_eit_section(section_data)
         if section is None:
             continue
         
