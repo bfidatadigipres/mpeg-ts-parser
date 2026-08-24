@@ -65,7 +65,7 @@ folder = mtp.build_folder_path(event, format="string")
 # Returns: "09-00-00_1425_00-30-00"
 
 folder_list = mtp.build_folder_path(event, format="list")
-# Returns: ['09', '00', '00', '1425', '00', '30', '00']
+# Returns: ['09:00:00', '1425', '00:30:00']
 ```
 
 ## Supported Sources
