@@ -258,11 +258,16 @@ def parse_eit_present_following(
         events = section.get('events', [])
         
         if table_id == EIT_TABLE_ID_PRESENT_FOLLOWING:
-            if len(events) >= 1 and present_event is None:
-                present_event = events[0]
+            for event in events:
+                if event.get('running_status') == 4 and present_event is None:
+                    present_event = event
+                elif event.get('running_status') == 1 and next_event is None:
+                    next_event = event
             
-            if len(events) >= 2 and next_event is None:
-                next_event = events[1]
+            schedule_events.extend(
+                e for e in events
+                if e.get('running_status') not in (1, 4)
+            )
         
         elif (
             table_id >= EIT_TABLE_ID_SCHEDULE_START
