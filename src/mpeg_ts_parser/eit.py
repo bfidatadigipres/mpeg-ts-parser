@@ -136,20 +136,27 @@ def parse_eit_section(data: bytes) -> dict | None:
 def find_eit_packets(
     stream: StreamBase,
     eit_pid: int,
-    max_packets: int = 500,
+    max_packets: int = 5000,
+    timeout: float = 2.0,
 ) -> list[bytes]:
     """Find EIT packets from stream and reassemble sections.
     
     Handles multi-packet section reassembly based on section_length field.
+    For network streams (RTP/UDP/HTTP), reads until EIT found or timeout.
+    For file streams, reads sequentially from current position.
     
     Args:
         stream: Stream reader
         eit_pid: EIT PID
-        max_packets: Maximum packets to scan
+        max_packets: Maximum packets to scan (file streams only)
+        timeout: Maximum time to wait (network streams only)
     
     Returns:
         List of complete EIT section payloads
     """
+    if hasattr(stream, 'read_until_eit'):
+        return stream.read_until_eit(eit_pid, timeout=timeout)
+    
     packets = stream.read_packets(max_packets)
     eit_sections = []
     
@@ -211,12 +218,17 @@ def find_eit_packets(
     return eit_sections
 
 
-def parse_eit_present_following(stream: StreamBase, eit_pid: int | None = None) -> dict:
+def parse_eit_present_following(
+    stream: StreamBase,
+    eit_pid: int | None = None,
+    timeout: float = 2.0,
+) -> dict:
     """Parse EIT present/following events.
     
     Args:
         stream: Stream reader
         eit_pid: Optional EIT PID (discovered if not provided)
+        timeout: Maximum time to wait for EIT data (network streams)
     
     Returns:
         Dict with 'present' and 'next' events
@@ -226,7 +238,7 @@ def parse_eit_present_following(stream: StreamBase, eit_pid: int | None = None) 
         eit_pid = get_eit_pid(stream, pat)
 
     stream.seek(0)
-    eit_sections = find_eit_packets(stream, eit_pid)
+    eit_sections = find_eit_packets(stream, eit_pid, timeout=timeout)
     
     present_event = None
     next_event = None
@@ -275,6 +287,7 @@ def parse_eit_schedule(
     stream: StreamBase,
     eit_pid: int | None = None,
     max_events: int = 10,
+    timeout: float = 2.0,
 ) -> list[dict]:
     """Parse EIT schedule events.
     
@@ -282,6 +295,7 @@ def parse_eit_schedule(
         stream: Stream reader
         eit_pid: Optional EIT PID
         max_events: Maximum events to return (1-40)
+        timeout: Maximum time to wait for EIT data (network streams)
     
     Returns:
         List of schedule events
@@ -293,7 +307,9 @@ def parse_eit_schedule(
         eit_pid = get_eit_pid(stream, pat)
 
     stream.seek(0)
-    eit_sections = find_eit_packets(stream, eit_pid, max_packets=1000)
+    eit_sections = find_eit_packets(
+        stream, eit_pid, max_packets=1000, timeout=timeout,
+    )
     
     events = []
     for section_data in eit_sections:

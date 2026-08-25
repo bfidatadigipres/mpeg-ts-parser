@@ -2,6 +2,7 @@
 
 import logging
 import socket
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import BinaryIO
@@ -162,6 +163,128 @@ class RTPStream(StreamBase):
             self.socket = None
         self._connected = False
         logger.debug("RTP stream closed")
+    
+    def read_until_eit(
+        self,
+        eit_pid: int,
+        timeout: float = 2.0,
+        max_sections: int = 10,
+    ) -> list[bytes]:
+        """Read packets until EIT sections are found or timeout.
+        
+        For network streams where we can't seek, this keeps reading
+        until complete EIT sections are assembled.
+        
+        Args:
+            eit_pid: EIT PID to look for
+            timeout: Maximum time to wait in seconds
+            max_sections: Stop after finding this many sections
+        
+        Returns:
+            List of complete EIT section payloads
+        """
+        if not self._connected:
+            self.connect()
+        
+        eit_sections = []
+        section_buffer = b''
+        in_section = False
+        expected_length = 0
+        start_time = time.monotonic()
+        
+        logger.info(
+            "Reading RTP stream for EIT (PID %d), timeout=%.1fs",
+            eit_pid, timeout,
+        )
+        
+        while time.monotonic() - start_time < timeout:
+            try:
+                data = self.socket.recv(65535) if self.socket else b''
+            except socket.timeout:
+                continue
+            except OSError as e:
+                logger.warning("Socket error: %s", e)
+                break
+            
+            if not data:
+                continue
+            
+            stripped, _ = detect_and_strip_rtp(data)
+            self._buffer += stripped
+            buffer = self._buffer
+            
+            while len(buffer) >= TS_PACKET_SIZE:
+                if buffer[0] != TS_SYNC_BYTE:
+                    buffer = buffer[1:]
+                    continue
+                
+                packet = buffer[:TS_PACKET_SIZE]
+                buffer = buffer[TS_PACKET_SIZE:]
+                
+                header = parse_ts_header(packet)
+                if header is None:
+                    continue
+                
+                if header['pid'] != eit_pid:
+                    continue
+                
+                payload_start = 4
+                if header['adaptation_field_control'] in (2, 3):
+                    if header['adaptation_field_control'] == 2:
+                        continue
+                    if len(packet) > 4:
+                        adaptation_length = packet[4]
+                        payload_start = 5 + adaptation_length
+                
+                if payload_start >= TS_PACKET_SIZE:
+                    continue
+                
+                payload = packet[payload_start:]
+                if len(payload) == 0:
+                    continue
+                
+                if header['payload_unit_start_indicator']:
+                    pointer_field = payload[0]
+                    section_data = payload[1 + pointer_field:]
+                    
+                    if in_section and len(section_buffer) >= expected_length:
+                        eit_sections.append(section_buffer[:expected_length])
+                        if len(eit_sections) >= max_sections:
+                            self._buffer = buffer
+                            return eit_sections
+                    
+                    if len(section_data) >= 3:
+                        section_length = (
+                            ((section_data[1] & 0x0F) << 8) | section_data[2]
+                        )
+                        expected_length = 3 + section_length
+                        section_buffer = section_data
+                        in_section = True
+                    else:
+                        in_section = False
+                        section_buffer = b''
+                else:
+                    if in_section:
+                        section_buffer += payload
+                
+                if in_section and len(section_buffer) >= expected_length:
+                    eit_sections.append(section_buffer[:expected_length])
+                    section_buffer = b''
+                    in_section = False
+                    if len(eit_sections) >= max_sections:
+                        self._buffer = buffer
+                        return eit_sections
+        
+        if in_section and len(section_buffer) >= expected_length:
+            eit_sections.append(section_buffer[:expected_length])
+        
+        self._buffer = buffer
+        logger.info(
+            "Found %d EIT sections in %.1fs",
+            len(eit_sections),
+            time.monotonic() - start_time,
+        )
+        return eit_sections
 
 
 class FileStream(StreamBase):

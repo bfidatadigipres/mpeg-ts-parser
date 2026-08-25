@@ -61,7 +61,9 @@ class Session:
             )
         
         try:
-            eit_data = parse_eit_present_following(self._stream)
+            eit_data = parse_eit_present_following(
+                self._stream, timeout=self.timeout,
+            )
             
             present = eit_data.get('present')
             next_evt = eit_data.get('next')
@@ -72,6 +74,7 @@ class Session:
                 schedule = parse_eit_schedule(
                     self._stream,
                     max_events=max_schedule_events,
+                    timeout=self.timeout,
                 )
             
             if present or next_evt:
@@ -135,7 +138,7 @@ def get_programme_info(
     stream = create_stream(source, timeout)
     
     try:
-        eit_data = parse_eit_present_following(stream)
+        eit_data = parse_eit_present_following(stream, timeout=timeout)
         
         present = eit_data.get('present')
         next_evt = eit_data.get('next')
@@ -146,6 +149,7 @@ def get_programme_info(
             schedule = parse_eit_schedule(
                 stream,
                 max_events=max_schedule_events,
+                timeout=timeout,
             )
         
         if present or next_evt:
