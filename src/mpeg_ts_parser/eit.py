@@ -224,7 +224,8 @@ def parse_eit_present_following(stream: StreamBase, eit_pid: int | None = None) 
     if eit_pid is None:
         pat = find_pat(stream)
         eit_pid = get_eit_pid(stream, pat)
-    
+
+    stream.seek(0)
     eit_sections = find_eit_packets(stream, eit_pid)
     
     present_event = None
@@ -290,7 +291,8 @@ def parse_eit_schedule(
     if eit_pid is None:
         pat = find_pat(stream)
         eit_pid = get_eit_pid(stream, pat)
-    
+
+    stream.seek(0)
     eit_sections = find_eit_packets(stream, eit_pid, max_packets=1000)
     
     events = []

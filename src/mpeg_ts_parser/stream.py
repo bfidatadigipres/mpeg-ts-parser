@@ -89,6 +89,10 @@ class StreamBase(ABC):
         """Close the stream."""
         pass
     
+    def seek(self, offset: int = 0) -> None:
+        """Seek to position in stream. No-op for network streams."""
+        pass
+    
     def __enter__(self):
         return self
     
@@ -167,6 +171,7 @@ class FileStream(StreamBase):
         super().__init__(timeout)
         self.file_path = file_path
         self.file: BinaryIO | None = None
+        self._buffer = b''
     
     def open(self) -> None:
         """Open the file."""
@@ -177,12 +182,18 @@ class FileStream(StreamBase):
         self.file = open(path, 'rb')
         logger.info("Opened file: %s", self.file_path)
     
+    def seek(self, offset: int = 0) -> None:
+        """Seek to position in file."""
+        if self.file:
+            self.file.seek(offset)
+            self._buffer = b''
+    
     def read_packets(self, count: int = 100) -> list[bytes]:
         if not self.file:
             self.open()
         
         packets = []
-        buffer = b''
+        buffer = self._buffer
         
         while len(packets) < count:
             chunk = self.file.read(65535) if self.file else b''
@@ -200,7 +211,8 @@ class FileStream(StreamBase):
                 else:
                     buffer = buffer[1:]
                     logger.warning("Skipping byte: not TS sync byte")
-        
+
+        self._buffer = buffer
         return packets
     
     def close(self) -> None:
