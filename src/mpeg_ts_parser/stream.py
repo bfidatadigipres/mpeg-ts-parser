@@ -115,6 +115,7 @@ class RTPStream(StreamBase):
     def connect(self) -> None:
         """Open UDP socket for RTP stream."""
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.settimeout(self.timeout)
         
         if self.host:
