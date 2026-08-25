@@ -96,6 +96,60 @@ folder_list = mtp.build_folder_path(event, format="list")
 }
 ```
 
+## Understanding Present/Next Events
+
+UK satellite broadcasters typically send present and following events in **separate EIT sections**, rotating in the stream. The parser uses the `running_status` field to assign events:
+
+| running_status | Meaning | Assigned to |
+|----------------|---------|-------------|
+| 4 | Currently running | `present` |
+| 1 | Starts soon | `next` |
+
+### How It Works
+
+1. The parser reads EIT sections from the stream
+2. Events with `running_status=4` populate `present`
+3. Events with `running_status=1` populate `next`
+4. If `next` is not found in present/following sections, the parser falls back to the first schedule event with a different `event_id`
+
+### Event Fields
+
+Each event dict contains:
+
+```python
+{
+    'event_id': 1425,           # Unique programme identifier
+    'start_time': '09-00-00',   # Start time (HH-MM-SS)
+    'duration': '00-30-00',     # Duration (HH-MM-SS)
+    'name': 'Programme Name',   # Event name (may contain control chars)
+    'running_status': 4,        # 1=starts soon, 4=current
+    'free_ca_mode': 0,          # 0=free-to-air, 1=scrambled
+}
+```
+
+### Status Values
+
+| status | Meaning |
+|--------|---------|
+| `success` | At least one event found |
+| `eit_unavailable` | No EIT data in stream |
+| `error` | Parsing error occurred |
+
+### Schedule Data
+
+Schedule tables (`table_id` 0x4F-0x5F) are broadcast less frequently than present/following. Use `schedule_timeout` (default 5s) to allow more time for capture:
+
+```python
+result = mtp.get_programme_info(
+    "rtp://@:30001",
+    include_schedule=True,
+    max_schedule_events=20,
+    schedule_timeout=10.0,  # Longer timeout for schedule data
+)
+```
+
+Note: Some broadcasters only transmit present/following events, not full schedule data.
+
 ## API Reference
 
 ### `get_programme_info(source, timeout=2.0, include_schedule=False, max_schedule_events=10)`
