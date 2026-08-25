@@ -138,6 +138,7 @@ def find_eit_packets(
     eit_pid: int,
     max_packets: int = 5000,
     timeout: float = 2.0,
+    max_sections: int = 50,
 ) -> list[bytes]:
     """Find EIT packets from stream and reassemble sections.
     
@@ -150,12 +151,15 @@ def find_eit_packets(
         eit_pid: EIT PID
         max_packets: Maximum packets to scan (file streams only)
         timeout: Maximum time to wait (network streams only)
+        max_sections: Maximum sections to collect (network streams only)
     
     Returns:
         List of complete EIT section payloads
     """
     if hasattr(stream, 'read_until_eit'):
-        return stream.read_until_eit(eit_pid, timeout=timeout)
+        return stream.read_until_eit(
+            eit_pid, timeout=timeout, max_sections=max_sections,
+        )
     
     packets = stream.read_packets(max_packets)
     eit_sections = []
@@ -263,11 +267,6 @@ def parse_eit_present_following(
                     present_event = event
                 elif event.get('running_status') == 1 and next_event is None:
                     next_event = event
-            
-            schedule_events.extend(
-                e for e in events
-                if e.get('running_status') not in (1, 4)
-            )
         
         elif (
             table_id >= EIT_TABLE_ID_SCHEDULE_START
@@ -328,7 +327,7 @@ def parse_eit_schedule(
 
     stream.seek(0)
     eit_sections = find_eit_packets(
-        stream, eit_pid, max_packets=5000, timeout=timeout,
+        stream, eit_pid, max_packets=5000, timeout=timeout, max_sections=100,
     )
     
     events = []
