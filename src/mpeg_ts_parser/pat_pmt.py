@@ -166,7 +166,7 @@ def discover_eit_pid_from_pmt(pmt_data: dict) -> int | None:
     return None
 
 
-def find_pat(stream: StreamBase, max_packets: int = 200) -> dict | None:
+def find_pat(stream: StreamBase, max_packets: int = 1000) -> dict | None:
     """Find and parse PAT from stream.
     
     Args:
@@ -215,7 +215,7 @@ def find_pat(stream: StreamBase, max_packets: int = 200) -> dict | None:
     return None
 
 
-def find_pmt(stream: StreamBase, pmt_pid: int, max_packets: int = 200) -> dict | None:
+def find_pmt(stream: StreamBase, pmt_pid: int, max_packets: int = 1000) -> dict | None:
     """Find and parse PMT from stream.
     
     Args:

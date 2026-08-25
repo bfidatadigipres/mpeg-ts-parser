@@ -222,6 +222,7 @@ def parse_eit_present_following(
     stream: StreamBase,
     eit_pid: int | None = None,
     timeout: float = 2.0,
+    schedule_timeout: float = 5.0,
 ) -> dict:
     """Parse EIT present/following events.
     
@@ -229,6 +230,7 @@ def parse_eit_present_following(
         stream: Stream reader
         eit_pid: Optional EIT PID (discovered if not provided)
         timeout: Maximum time to wait for EIT data (network streams)
+        schedule_timeout: Time to wait for schedule data (for next fallback)
     
     Returns:
         Dict with 'present' and 'next' events
@@ -242,28 +244,41 @@ def parse_eit_present_following(
     
     present_event = None
     next_event = None
+    schedule_events = []
     
     for section_data in eit_sections:
         section = parse_eit_section(section_data)
         if section is None:
             continue
         
-        if section['table_id'] != EIT_TABLE_ID_PRESENT_FOLLOWING:
-            continue
-        
         if section['current_next_indicator'] != 1:
             continue
         
+        table_id = section['table_id']
         events = section.get('events', [])
         
-        if len(events) >= 1 and present_event is None:
-            present_event = events[0]
+        if table_id == EIT_TABLE_ID_PRESENT_FOLLOWING:
+            if len(events) >= 1 and present_event is None:
+                present_event = events[0]
+            
+            if len(events) >= 2 and next_event is None:
+                next_event = events[1]
         
-        if len(events) >= 2 and next_event is None:
-            next_event = events[1]
+        elif (
+            table_id >= EIT_TABLE_ID_SCHEDULE_START
+            and table_id <= EIT_TABLE_ID_SCHEDULE_END
+        ):
+            schedule_events.extend(events)
         
         if present_event and next_event:
             break
+    
+    if next_event is None and schedule_events:
+        schedule_events.sort(key=lambda e: e.get('start_time', ''))
+        for evt in schedule_events:
+            if evt.get('event_id') != present_event.get('event_id'):
+                next_event = evt
+                break
     
     metadata = {}
     for section_data in eit_sections:
@@ -287,7 +302,7 @@ def parse_eit_schedule(
     stream: StreamBase,
     eit_pid: int | None = None,
     max_events: int = 10,
-    timeout: float = 2.0,
+    timeout: float = 5.0,
 ) -> list[dict]:
     """Parse EIT schedule events.
     
@@ -308,7 +323,7 @@ def parse_eit_schedule(
 
     stream.seek(0)
     eit_sections = find_eit_packets(
-        stream, eit_pid, max_packets=1000, timeout=timeout,
+        stream, eit_pid, max_packets=5000, timeout=timeout,
     )
     
     events = []

@@ -45,12 +45,14 @@ class Session:
         self,
         include_schedule: bool = False,
         max_schedule_events: int = 10,
+        schedule_timeout: float = 5.0,
     ) -> dict:
         """Get present/next EIT events from the stream.
         
         Args:
             include_schedule: Include schedule events
             max_schedule_events: Max schedule events (1-40)
+            schedule_timeout: Time to wait for schedule data
         
         Returns:
             Dict with present/next events and metadata
@@ -63,6 +65,7 @@ class Session:
         try:
             eit_data = parse_eit_present_following(
                 self._stream, timeout=self.timeout,
+                schedule_timeout=schedule_timeout,
             )
             
             present = eit_data.get('present')
@@ -74,7 +77,7 @@ class Session:
                 schedule = parse_eit_schedule(
                     self._stream,
                     max_events=max_schedule_events,
-                    timeout=self.timeout,
+                    timeout=schedule_timeout,
                 )
             
             if present or next_evt:
@@ -113,6 +116,7 @@ def get_programme_info(
     timeout: float = 2.0,
     include_schedule: bool = False,
     max_schedule_events: int = 10,
+    schedule_timeout: float = 5.0,
 ) -> dict:
     """Get present/next EIT events from MPEG-TS source.
     
@@ -124,6 +128,7 @@ def get_programme_info(
         timeout: Socket timeout in seconds
         include_schedule: Include schedule events
         max_schedule_events: Max schedule events (1-40)
+        schedule_timeout: Time to wait for schedule data
     
     Returns:
         Dict with present/next events and metadata.
@@ -138,7 +143,9 @@ def get_programme_info(
     stream = create_stream(source, timeout)
     
     try:
-        eit_data = parse_eit_present_following(stream, timeout=timeout)
+        eit_data = parse_eit_present_following(
+            stream, timeout=timeout, schedule_timeout=schedule_timeout,
+        )
         
         present = eit_data.get('present')
         next_evt = eit_data.get('next')
@@ -149,7 +156,7 @@ def get_programme_info(
             schedule = parse_eit_schedule(
                 stream,
                 max_events=max_schedule_events,
-                timeout=timeout,
+                timeout=schedule_timeout,
             )
         
         if present or next_evt:
