@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from mpeg_ts_parser.eit import parse_eit_present_following, parse_eit_schedule
+from mpeg_ts_parser.eit import parse_eit_present_following
 from mpeg_ts_parser.stream import StreamBase, create_stream
 from mpeg_ts_parser.utils import build_folder_path
 
@@ -43,16 +43,8 @@ class Session:
     
     def get_programme_info(
         self,
-        include_schedule: bool = False,
-        max_schedule_events: int = 10,
-        schedule_timeout: float = 5.0,
     ) -> dict:
         """Get present/next EIT events from the stream.
-        
-        Args:
-            include_schedule: Include schedule events
-            max_schedule_events: Max schedule events (1-40)
-            schedule_timeout: Time to wait for schedule data
         
         Returns:
             Dict with present/next events and metadata
@@ -65,20 +57,11 @@ class Session:
         try:
             eit_data = parse_eit_present_following(
                 self._stream, timeout=self.timeout,
-                schedule_timeout=schedule_timeout,
             )
             
             present = eit_data.get('present')
             next_evt = eit_data.get('next')
             metadata = eit_data.get('metadata', {})
-            
-            schedule = []
-            if include_schedule:
-                schedule = parse_eit_schedule(
-                    self._stream,
-                    max_events=max_schedule_events,
-                    timeout=schedule_timeout,
-                )
             
             if present or next_evt:
                 status = 'success'
@@ -89,7 +72,6 @@ class Session:
                 'status': status,
                 'present': present,
                 'next': next_evt,
-                'schedule': schedule,
                 'metadata': metadata,
             }
         
@@ -99,7 +81,6 @@ class Session:
                 'status': 'error',
                 'present': None,
                 'next': None,
-                'schedule': [],
                 'metadata': {},
                 'error': str(e),
             }
@@ -114,9 +95,6 @@ class Session:
 def get_programme_info(
     source: str,
     timeout: float = 2.0,
-    include_schedule: bool = False,
-    max_schedule_events: int = 10,
-    schedule_timeout: float = 5.0,
 ) -> dict:
     """Get present/next EIT events from MPEG-TS source.
     
@@ -126,9 +104,6 @@ def get_programme_info(
     Args:
         source: RTP/UDP/HTTP URL or file path
         timeout: Socket timeout in seconds
-        include_schedule: Include schedule events
-        max_schedule_events: Max schedule events (1-40)
-        schedule_timeout: Time to wait for schedule data
     
     Returns:
         Dict with present/next events and metadata.
@@ -143,21 +118,11 @@ def get_programme_info(
     stream = create_stream(source, timeout)
     
     try:
-        eit_data = parse_eit_present_following(
-            stream, timeout=timeout, schedule_timeout=schedule_timeout,
-        )
+        eit_data = parse_eit_present_following(stream, timeout=timeout)
         
         present = eit_data.get('present')
         next_evt = eit_data.get('next')
         metadata = eit_data.get('metadata', {})
-        
-        schedule = []
-        if include_schedule:
-            schedule = parse_eit_schedule(
-                stream,
-                max_events=max_schedule_events,
-                timeout=schedule_timeout,
-            )
         
         if present or next_evt:
             status = 'success'
@@ -168,7 +133,6 @@ def get_programme_info(
             'status': status,
             'present': present,
             'next': next_evt,
-            'schedule': schedule,
             'metadata': metadata,
         }
     
@@ -178,7 +142,6 @@ def get_programme_info(
             'status': 'error',
             'present': None,
             'next': None,
-            'schedule': [],
             'metadata': {},
             'error': str(e),
         }

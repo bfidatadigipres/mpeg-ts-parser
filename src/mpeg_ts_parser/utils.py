@@ -74,6 +74,11 @@ def parse_short_event_descriptor(data: bytes) -> str | None:
         event_name = data[4:4 + event_name_length].decode(
             'iso-8859-1', errors='replace'
         )
+        event_name = event_name.strip()
+        if '\x86' in str(event_name):
+            event_name = str(event_name).replace('\x86', '')
+        if '\x87' in str(event_name):
+            event_name = str(event_name).replace('\x87', '')
         return event_name.strip()
     except Exception as e:
         logger.warning("Failed to parse short event descriptor: %s", e)

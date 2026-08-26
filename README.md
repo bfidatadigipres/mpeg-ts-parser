@@ -8,7 +8,7 @@ Parse MPEG Transport Streams to extract DVB EIT programme metadata.
 - Support for RTP, UDP, HTTP, and file-based MPEG-TS sources
 - Automatic RTP header detection and stripping
 - EIT PID discovery from PMT descriptors
-- Optional schedule event extraction
+- DVB control character stripping from event names
 - Pure Python, no external dependencies
 - Full type hints
 
@@ -46,16 +46,7 @@ with mtp.connect("rtp://@:30001", timeout=2.0) as session:
 
 ### Include Schedule Events
 
-```python
-result = mtp.get_programme_info(
-    "rtp://@:30001",
-    include_schedule=True,
-    max_schedule_events=20,
-)
-
-for event in result['schedule']:
-    print(f"Event {event['event_id']}: {event['name']}")
-```
+Schedule event extraction is not supported. UK satellite broadcasters typically only transmit present/following events, not full schedule data.
 
 ### Build Folder Path
 
@@ -87,7 +78,6 @@ folder_list = mtp.build_folder_path(event, format="list")
         'name': 'Programme Name',
     } | None,
     'next': { ... } | None,
-    'schedule': [...],  # Optional
     'metadata': {
         'network_id': 1234,
         'transport_stream_id': 5678,
@@ -110,7 +100,6 @@ UK satellite broadcasters typically send present and following events in **separ
 1. The parser reads EIT sections from the stream
 2. Events with `running_status=4` populate `present`
 3. Events with `running_status=1` populate `next`
-4. If `next` is not found in present/following sections, the parser falls back to the first schedule event with a different `event_id`
 
 ### Event Fields
 
@@ -121,7 +110,7 @@ Each event dict contains:
     'event_id': 1425,           # Unique programme identifier
     'start_time': '09-00-00',   # Start time (HH-MM-SS)
     'duration': '00-30-00',     # Duration (HH-MM-SS)
-    'name': 'Programme Name',   # Event name (may contain control chars)
+    'name': 'Programme Name',   # Event name (control chars stripped)
     'running_status': 4,        # 1=starts soon, 4=current
     'free_ca_mode': 0,          # 0=free-to-air, 1=scrambled
 }
@@ -135,24 +124,9 @@ Each event dict contains:
 | `eit_unavailable` | No EIT data in stream |
 | `error` | Parsing error occurred |
 
-### Schedule Data
-
-Schedule tables (`table_id` 0x4F-0x5F) are broadcast less frequently than present/following. Use `schedule_timeout` (default 5s) to allow more time for capture:
-
-```python
-result = mtp.get_programme_info(
-    "rtp://@:30001",
-    include_schedule=True,
-    max_schedule_events=20,
-    schedule_timeout=10.0,  # Longer timeout for schedule data
-)
-```
-
-Note: Some broadcasters only transmit present/following events, not full schedule data.
-
 ## API Reference
 
-### `get_programme_info(source, timeout=2.0, include_schedule=False, max_schedule_events=10)`
+### `get_programme_info(source, timeout=2.0)`
 
 Stateless call to get present/next EIT events.
 
