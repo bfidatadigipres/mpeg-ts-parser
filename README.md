@@ -2,6 +2,12 @@
 
 Extract DVB EIT programme metadata from standard 188-byte MPEG Transport Streams.
 
+## Project Context
+
+This package was developed as part of **[STORA](https://github.com/bfidatadigipres/STORA)** (System for Television Off-air Recording and Archiving), the open-source recording system used by the **[BFI National Television Archive](https://www.bfi.org.uk/archive-collections)**.
+
+STORA records 17 UK television channels 24 hours a day, 7 days a week, preserving broadcast television under the provision of the Broadcasting Act 1990. This parser will replace the `libdvbtee` dependency, enabling EIT extraction directly from RTP streams and eliminating the need for separate UDP monitoring streams.
+
 ## What This Package Does
 
 Parses MPEG-TS files and live streams to extract **DVB Event Information Table (EIT)** data:
@@ -286,6 +292,10 @@ When MPEG-TS is carried over RTP (RFC 3550), each packet has an additional RTP h
 - Second byte payload type `33` = MPEG-TS payload
 
 The header size is calculated as `12 + (csrc_count × 4)` bytes and stripped before TS packet parsing begins.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a detailed list of changes.
 
 ## License
 
