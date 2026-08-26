@@ -11,9 +11,7 @@ license = "MIT"
 license-files = ["LICEN[CS]E*"]
 requires-python = ">=3.11"
 keywords = ["mpeg-ts", "dvb", "eit", "rtp", "transport-stream", "programme-metadata"]
-authors = [
-  { name = "Digitensions", email = "joanna.white@bfi.org.uk" },
-]
+authors = [{ name = "digitensions @ BFI National Archive" }]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
