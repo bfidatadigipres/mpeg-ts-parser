@@ -84,6 +84,8 @@ This package is specifically designed for **standard 188-byte MPEG-TS with DVB E
 
 ### Installation
 
+Requires **Python 3.11+**.
+
 ```bash
 pip install mpeg-ts-parser
 ```
