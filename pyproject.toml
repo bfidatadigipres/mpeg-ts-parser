@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mpeg-ts-parser"
-version = "0.1.1"
+version = "1.0.0"
 description = "Parse MPEG Transport Streams to extract DVB EIT programme metadata"
 readme = "README.md"
 license = "MIT"
@@ -20,6 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent",
     "Topic :: Multimedia :: Video",
     "Topic :: System :: Networking",
