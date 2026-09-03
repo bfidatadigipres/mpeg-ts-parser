@@ -199,7 +199,7 @@ Build folder path from event data. Format: `"string"` or `"list"`.
 ## Development
 
 ```bash
-git clone https://github.com/whitej/mpeg-ts-parser.git
+git clone https://github.com/bfidatadigipres/mpeg-ts-parser.git
 cd mpeg-ts-parser
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
